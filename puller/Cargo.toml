@@ -1,0 +1,26 @@
+[package]
+name = "puller"
+version = "0.1.0"
+authors = ["Mikail Bagishov <bagishov.mikail@yandex.ru>"]
+edition = "2018"
+
+[dependencies]
+dkregistry = { git = "https://github.com/mikailbag/dkregistry-rs", branch = "thiserror" }
+thiserror = "1.0.20"
+tokio = { version = "0.2.21", features = ["macros", "fs"] }
+tracing = "0.1.15"
+tracing-futures = "0.2.4"
+serde_json = "1.0.55"
+base64 = "0.12.2"
+k8s-openapi = { version = "0.8.0", optional = true }
+home = "0.5.3"
+
+
+[features]
+k8s = ["k8s-openapi"]
+
+[dev-dependencies]
+tracing-subscriber = "0.2.6"
+tempfile = "3.1.0"
+tokio = { version = "0.2.21", features = ["io-std"] }
+k8s-openapi = { version = "0.8.0", features = ["v1_16"] }

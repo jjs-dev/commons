@@ -172,7 +172,7 @@ dependencies = [
 [[package]]
 name = "dkregistry"
 version = "0.4.0-alpha.0"
-source = "git+https://github.com/mikailbag/dkregistry-rs?branch=thiserror#57995a98cd575569e629e3eb5684425f2357516e"
+source = "git+https://github.com/mikailbag/dkregistry-rs?branch=all#3b99f7fc484e182d81eb6f4e2e6597564957550c"
 dependencies = [
  "async-stream",
  "base64",
@@ -547,12 +547,9 @@ dependencies = [
  "base64",
  "bytes",
  "chrono",
- "http",
- "percent-encoding",
  "serde",
  "serde-value",
  "serde_json",
- "url",
 ]
 
 [[package]]
@@ -863,6 +860,7 @@ dependencies = [
  "base64",
  "dkregistry",
  "home",
+ "http",
  "k8s-openapi",
  "serde_json",
  "tempfile",

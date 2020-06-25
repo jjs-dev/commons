@@ -50,11 +50,20 @@ impl Puller {
         image: &str,
         destination: &Path,
         cancel: tokio::sync::CancellationToken,
-    ) -> Result<tokio::sync::oneshot::Receiver<Result<(), Error>>, Error> {
+    ) -> Result<(), Error> {
         let image_ref: dkregistry::reference::Reference = image.parse()?;
+        event!(
+            Level::TRACE,
+            registry = image_ref.registry().as_str(),
+            repository = image_ref.repository().as_str(),
+            image = image_ref.version().as_str()
+        );
         let mut config = dkregistry::v2::Config::default();
         let creds = self.find_credentials(&image_ref.registry());
-        config = config.username(creds.0).password(creds.1);
+        config = config
+            .username(creds.0)
+            .password(creds.1)
+            .registry(&image_ref.registry());
         let mut client = config.build()?;
         if !client.is_auth(None).await? {
             let token_scope = format!("repository:{}:pull", image_ref.repository());
@@ -74,18 +83,15 @@ impl Puller {
                 return Err(Error::ImageNotExists(image.to_string()));
             }
         }
-        let (done_tx, done_rx) = tokio::sync::oneshot::channel();
         // this task downloads the manifest
         let sem = self.download_semaphore.clone();
         let destination = destination.to_path_buf();
         tokio::task::spawn(
-            async move {
-                let res = Self::pull_inner(client, image_ref, cancel, sem, destination).await;
-                done_tx.send(res).ok();
-            }
-            .in_current_span(),
-        );
-        Ok(done_rx)
+            async move { Self::pull_inner(client, image_ref, cancel, sem, destination).await }
+                .in_current_span(),
+        )
+        .await
+        .unwrap()
     }
 
     /// This function is called by [`Puller::pull`](Puller::pull) when
@@ -122,16 +128,12 @@ impl Puller {
             let repo = image_ref.repository();
             let tx = tx.clone();
             let cancel = cancel.clone();
-            tokio::task::spawn(Self::fetch_layer(
-                client,
-                sem,
-                repo,
-                tx,
-                cancel,
-                layer_digest,
-                layer_id,
-            ));
+            tokio::task::spawn(
+                Self::fetch_layer(client, sem, repo, tx, cancel, layer_digest, layer_id)
+                    .in_current_span(),
+            );
         }
+        drop(tx);
 
         let mut layers = Vec::new();
         layers.resize_with(digests_count, Vec::new);
@@ -151,6 +153,7 @@ impl Puller {
 
         // start separate task which unpacks received layers
         tokio::task::spawn_blocking(move || dkregistry::render::unpack(&layers, &destination))
+            .in_current_span()
             .await
             .unwrap()?;
         if cancel.is_cancelled() {
@@ -172,20 +175,21 @@ impl Puller {
         layer_id: usize,
     ) {
         let _can_download = sem.acquire_owned().await;
+        event!(Level::TRACE, "download permitted");
         tokio::select! {
             get_layer_result = client.get_blob(&repo, &layer_digest) => {
                 match &get_layer_result {
                     Ok(vec) => {
-                        event!(Level::TRACE, digest=layer_digest.as_str(), "download succeeded: size {}", vec.len());
+                        event!(Level::TRACE, "download succeeded: size {}", vec.len());
                     }
                     Err(err) => {
-                        event!(Level::ERROR, digest=layer_digest.as_str(), "layer failed to download: {}", err);
+                        event!(Level::ERROR, "layer failed to download: {}", err);
                     }
                 }
                 tx.send((layer_id, get_layer_result)).await.expect("should never panic");
             }
             _ = cancel.cancelled() => {
-                event!(Level::WARN, digest=layer_digest.as_str(), "layer download was cancelled");
+                event!(Level::WARN, "layer download was cancelled");
                 // do nothing, the whole pull is cancelled
             }
         }
@@ -221,8 +225,10 @@ impl ImagePullSecret {
     /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let data = std::fs::read("~/.docker/config.json")?;
     /// let data = serde_json::from_slice(&data)?;
-    /// let secrets = puller::ImagePullSecret::parse_docker_config(data);
-    /// dbg!(secrets);  
+    /// let secrets = puller::ImagePullSecret::parse_docker_config(&data);
+    /// for sec in secrets.unwrap_or_default() {
+    ///     println!("{}", sec);
+    /// }  
     /// # Ok(())
     /// # }
     /// ```

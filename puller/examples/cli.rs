@@ -22,10 +22,29 @@ async fn read_image_pull_secrets() -> Vec<puller::ImagePullSecret> {
     }
 }
 
+#[derive(Debug)]
+struct ErrorWrapper<E>(E);
+
+impl<E: std::error::Error + 'static> std::fmt::Display for ErrorWrapper<E> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut err = &self.0 as &(dyn std::error::Error + 'static);
+        loop {
+            writeln!(f, "{}", err)?;
+            err = match err.source() {
+                Some(s) => s,
+                None => break,
+            }
+        }
+        Ok(())
+    }
+}
+
+impl<E: std::error::Error + 'static> std::error::Error for ErrorWrapper<E> {}
+
 #[tokio::main]
 async fn main() {
     tracing_subscriber::FmtSubscriber::builder()
-        .with_env_filter("warn,puller=trace,cli=trace")
+        .with_env_filter("debug,puller=trace,cli=trace")
         .init();
     let tempdir = tempfile::tempdir().expect("failed to get a tempdir");
     let mut tokens: Vec<tokio::sync::CancellationToken> = Vec::new();
@@ -60,24 +79,12 @@ async fn main() {
             &line,
             pull_dest.display()
         );
-        let chan = match p.pull(line, &pull_dest, token).await {
-            Ok(ch) => ch,
+        match p.pull(line, &pull_dest, token).await {
+            Ok(()) => println!("{}: pull succeeded", line),
             Err(err) => {
-                eprintln!("Failed to start pulling: {}", err);
+                eprintln!("Pull failed: {}", ErrorWrapper(err));
                 continue;
             }
         };
-        let line = line.to_string();
-
-        tokio::task::spawn(async move {
-            match chan.await.unwrap() {
-                Ok(()) => {
-                    println!("{}: pull succeeded", line);
-                }
-                Err(err) => {
-                    println!("{}: pull failed: {}", line, err);
-                }
-            }
-        });
     }
 }

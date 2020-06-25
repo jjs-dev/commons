@@ -5,16 +5,15 @@ authors = ["Mikail Bagishov <bagishov.mikail@yandex.ru>"]
 edition = "2018"
 
 [dependencies]
-dkregistry = { git = "https://github.com/mikailbag/dkregistry-rs", branch = "thiserror" }
+dkregistry = { git = "https://github.com/mikailbag/dkregistry-rs", branch = "all" }
 thiserror = "1.0.20"
 tokio = { version = "0.2.21", features = ["macros", "fs"] }
 tracing = "0.1.15"
 tracing-futures = "0.2.4"
 serde_json = "1.0.55"
 base64 = "0.12.2"
-k8s-openapi = { version = "0.8.0", optional = true }
-home = "0.5.3"
-
+k8s-openapi = { version = "0.8.0", optional = true, default-features = false }
+http = "0.2.1"
 
 [features]
 k8s = ["k8s-openapi"]
@@ -23,4 +22,5 @@ k8s = ["k8s-openapi"]
 tracing-subscriber = "0.2.6"
 tempfile = "3.1.0"
 tokio = { version = "0.2.21", features = ["io-std"] }
-k8s-openapi = { version = "0.8.0", features = ["v1_16"] }
+k8s-openapi = { version = "0.8.0", features = ["v1_16"], default-features = false }
+home = "0.5.3"

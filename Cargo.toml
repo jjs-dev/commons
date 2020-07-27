@@ -1,3 +1,3 @@
 # We only have workspace to reuse `target` directories.
 [workspace]
-members = ["puller"]
+members = ["puller", "multiwake"]

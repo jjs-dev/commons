@@ -1,0 +1,10 @@
+[package]
+name = "multiwake"
+version = "0.1.0"
+authors = ["Mikail Bagishov <bagishov.mikail@yandex.ru>"]
+edition = "2018"
+
+[dependencies]
+
+[dev-dependencies]
+futures-util = "0.3.5"

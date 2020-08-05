@@ -1,0 +1,11 @@
+[package]
+name = "async-mpmc"
+version = "0.1.0"
+authors = ["Mikail Bagishov <bagishov.mikail@yandex.ru>"]
+edition = "2018"
+
+[dependencies]
+tracing = "0.1.18"
+tokio = { version = "0.2.22", features = ["rt-core", "macros"] }
+triomphe = "0.1.1"
+tracing-futures = "0.2.4"

@@ -5,7 +5,7 @@ use std::{
     sync::Arc,
 };
 use tokio::sync::Semaphore;
-use tracing::{instrument, trace, warn, error};
+use tracing::{error, instrument, trace, warn};
 use tracing_futures::Instrument;
 /// Main type of library, which supports loading and unpacking
 /// images.
@@ -142,10 +142,16 @@ impl Puller {
         trace!("Starting unpacking");
 
         // start separate task which unpacks received layers
-        tokio::task::spawn_blocking(move || dkregistry::render::unpack(&layers, &destination))
-            .in_current_span()
-            .await
-            .unwrap()?;
+        let current_span = tracing::Span::current();
+        tokio::task::spawn_blocking(move || {
+            let _enter = current_span.enter();
+            trace!("Unpacking started");
+            let res = dkregistry::render::unpack(&layers, &destination);
+            trace!("Unpacking finished");
+            res
+        })
+        .await
+        .unwrap()?;
         if cancel.is_cancelled() {
             warn!("cancellation request was ignored");
         }
@@ -165,7 +171,7 @@ impl Puller {
         layer_id: usize,
     ) {
         let _can_download = sem.acquire_owned().await;
-        trace!(layer_digest=layer_digest.as_str(), "download started");
+        trace!(layer_digest = layer_digest.as_str(), "download started");
         tokio::select! {
             get_layer_result = client.get_blob(&repo, &layer_digest) => {
                 match &get_layer_result {

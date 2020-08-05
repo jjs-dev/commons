@@ -5,7 +5,7 @@ use std::{
     sync::Arc,
 };
 use tokio::sync::Semaphore;
-use tracing::{event, instrument, Level};
+use tracing::{instrument, trace, warn, error};
 use tracing_futures::Instrument;
 /// Main type of library, which supports loading and unpacking
 /// images.
@@ -52,8 +52,7 @@ impl Puller {
         cancel: tokio::sync::CancellationToken,
     ) -> Result<(), Error> {
         let image_ref: dkregistry::reference::Reference = image.parse()?;
-        event!(
-            Level::TRACE,
+        trace!(
             registry = image_ref.registry().as_str(),
             repository = image_ref.repository().as_str(),
             image = image_ref.version().as_str()
@@ -86,27 +85,23 @@ impl Puller {
         // this task downloads the manifest
         let sem = self.download_semaphore.clone();
         let destination = destination.to_path_buf();
-        tokio::task::spawn(
-            async move { Self::pull_inner(client, image_ref, cancel, sem, destination).await }
-                .in_current_span(),
-        )
-        .await
-        .unwrap()
+
+        Self::fetch_layers(client, image_ref, cancel, sem, destination).await
     }
 
     /// This function is called by [`Puller::pull`](Puller::pull) when
     /// client is successfully created.
-    #[instrument(skip(client, download_semaphore, cancel))]
-    async fn pull_inner(
+    #[instrument(skip(client, download_semaphore, cancel, destination))]
+    async fn fetch_layers(
         client: dkregistry::v2::Client,
         image_ref: dkregistry::reference::Reference,
         cancel: tokio::sync::CancellationToken,
         download_semaphore: Arc<Semaphore>,
         destination: PathBuf,
     ) -> Result<(), Error> {
-        event!(
-            Level::TRACE,
+        trace!(
             image = image_ref.to_raw_string().as_str(),
+            destination = %destination.display(),
             "fetching manifest for {}",
             IMAGE_ARCHITECTURE
         );
@@ -115,12 +110,7 @@ impl Puller {
             .await?;
         let digests = manifest.layers_digests(Some(IMAGE_ARCHITECTURE))?;
         let digests_count = digests.len();
-        event!(
-            Level::TRACE,
-            image = image_ref.to_raw_string().as_str(),
-            "will fetch {} layers",
-            digests_count
-        );
+        trace!("will fetch {} layers", digests_count);
         let (tx, mut rx) = tokio::sync::mpsc::channel(digests_count);
         for (layer_id, layer_digest) in digests.into_iter().enumerate() {
             let client = client.clone();
@@ -149,7 +139,7 @@ impl Puller {
         // operation can not be cancelled arter this point
 
         assert_eq!(received_count, digests_count);
-        event!(Level::TRACE, "Starting unpacking");
+        trace!("Starting unpacking");
 
         // start separate task which unpacks received layers
         tokio::task::spawn_blocking(move || dkregistry::render::unpack(&layers, &destination))
@@ -157,14 +147,14 @@ impl Puller {
             .await
             .unwrap()?;
         if cancel.is_cancelled() {
-            event!(Level::WARN, "cancellation request was ignored");
+            warn!("cancellation request was ignored");
         }
 
         Ok(())
     }
 
     /// Tries to download one layer
-    #[instrument(skip(client, sem, tx, cancel))]
+    #[instrument(skip(client, sem, tx, cancel, repo, layer_digest))]
     async fn fetch_layer(
         client: dkregistry::v2::Client,
         sem: Arc<Semaphore>,
@@ -175,21 +165,21 @@ impl Puller {
         layer_id: usize,
     ) {
         let _can_download = sem.acquire_owned().await;
-        event!(Level::TRACE, "download permitted");
+        trace!(layer_digest=layer_digest.as_str(), "download started");
         tokio::select! {
             get_layer_result = client.get_blob(&repo, &layer_digest) => {
                 match &get_layer_result {
                     Ok(vec) => {
-                        event!(Level::TRACE, "download succeeded: size {}", vec.len());
+                        trace!(size=vec.len(), "download succeeded");
                     }
                     Err(err) => {
-                        event!(Level::ERROR, "layer failed to download: {}", err);
+                        error!(error=%err, "layer failed to download");
                     }
                 }
                 tx.send((layer_id, get_layer_result)).await.expect("should never panic");
             }
             _ = cancel.cancelled() => {
-                event!(Level::WARN, "layer download was cancelled");
+                warn!("layer download was cancelled");
                 // do nothing, the whole pull is cancelled
             }
         }
@@ -200,11 +190,11 @@ impl Puller {
     fn find_credentials(&self, registry: &str) -> (Option<String>, Option<String>) {
         for cred in &self.secrets {
             if cred.registry == registry {
-                event!(Level::TRACE, "found credentials: {}", cred);
+                trace!(credentials=%cred, "found credentials");
                 return (cred.username.clone(), cred.password.clone());
             }
         }
-        event!(Level::TRACE, "no credentials found");
+        trace!("no credentials found");
         (None, None)
     }
 }

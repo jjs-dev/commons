@@ -50,7 +50,7 @@ impl Puller {
         image: &str,
         destination: &Path,
         cancel: tokio::sync::CancellationToken,
-    ) -> Result<(), Error> {
+    ) -> Result<((), dkregistry::v2::manifest::Manifest), Error> {
         let image_ref: dkregistry::reference::Reference = image.parse()?;
         trace!(
             registry = image_ref.registry().as_str(),
@@ -86,7 +86,18 @@ impl Puller {
         let sem = self.download_semaphore.clone();
         let destination = destination.to_path_buf();
 
-        Self::fetch_layers(client, image_ref, cancel, sem, destination).await
+        trace!(
+            image = image_ref.to_raw_string().as_str(),
+            destination = %destination.display(),
+            "fetching manifest for {}",
+            IMAGE_ARCHITECTURE
+        );
+        let manifest = client
+            .get_manifest(&image_ref.repository(), &image_ref.version())
+            .await?;
+
+        let res = Self::fetch_layers(client, image_ref, cancel, sem, destination, &manifest).await;
+        Ok((res.unwrap(), manifest))
     }
 
     /// This function is called by [`Puller::pull`](Puller::pull) when
@@ -98,16 +109,8 @@ impl Puller {
         cancel: tokio::sync::CancellationToken,
         download_semaphore: Arc<Semaphore>,
         destination: PathBuf,
+        manifest: &dkregistry::v2::manifest::Manifest
     ) -> Result<(), Error> {
-        trace!(
-            image = image_ref.to_raw_string().as_str(),
-            destination = %destination.display(),
-            "fetching manifest for {}",
-            IMAGE_ARCHITECTURE
-        );
-        let manifest = client
-            .get_manifest(&image_ref.repository(), &image_ref.version())
-            .await?;
         let digests = manifest.layers_digests(Some(IMAGE_ARCHITECTURE))?;
         let digests_count = digests.len();
         trace!("will fetch {} layers", digests_count);

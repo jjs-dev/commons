@@ -64,14 +64,13 @@ impl Puller {
             .password(creds.1)
             .registry(&image_ref.registry());
         let mut client = config.build()?;
-        if !client.is_auth(None).await? {
+        if !client.is_auth().await? {
             let token_scope = format!("repository:{}:pull", image_ref.repository());
 
-            let token = client.login(&[&token_scope]).await?;
-            if !client.is_auth(Some(token.token())).await? {
+            client = client.authenticate(&[&token_scope]).await?;
+            if !client.is_auth().await? {
                 return Err(Error::LoginFailed);
             }
-            client.set_token(Some(token.token()));
         }
         // this check is used to report missing image nicier
         {

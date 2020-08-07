@@ -95,13 +95,15 @@ impl Puller {
             .get_manifest(&image_ref.repository(), &image_ref.version())
             .await?;
 
+        trace!(manifest = ?manifest, "fetched manifest");
+
         Self::fetch_layers(client, image_ref, cancel, sem, destination, &manifest).await?;
         Ok(manifest)
     }
 
     /// This function is called by [`Puller::pull`](Puller::pull) when
     /// client is successfully created.
-    #[instrument(skip(client, download_semaphore, cancel, destination))]
+    #[instrument(skip(client, download_semaphore, cancel, destination, manifest))]
     async fn fetch_layers(
         client: dkregistry::v2::Client,
         image_ref: dkregistry::reference::Reference,

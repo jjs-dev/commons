@@ -50,7 +50,7 @@ impl Puller {
         image: &str,
         destination: &Path,
         cancel: tokio::sync::CancellationToken,
-    ) -> Result<((), dkregistry::v2::manifest::Manifest), Error> {
+    ) -> Result<dkregistry::v2::manifest::Manifest, Error> {
         let image_ref: dkregistry::reference::Reference = image.parse()?;
         trace!(
             registry = image_ref.registry().as_str(),
@@ -95,8 +95,8 @@ impl Puller {
             .get_manifest(&image_ref.repository(), &image_ref.version())
             .await?;
 
-        let res = Self::fetch_layers(client, image_ref, cancel, sem, destination, &manifest).await;
-        Ok((res.unwrap(), manifest))
+        Self::fetch_layers(client, image_ref, cancel, sem, destination, &manifest).await?;
+        Ok(manifest)
     }
 
     /// This function is called by [`Puller::pull`](Puller::pull) when

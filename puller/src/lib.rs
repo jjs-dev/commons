@@ -110,7 +110,7 @@ impl Puller {
         cancel: tokio::sync::CancellationToken,
         download_semaphore: Arc<Semaphore>,
         destination: PathBuf,
-        manifest: &dkregistry::v2::manifest::Manifest
+        manifest: &dkregistry::v2::manifest::Manifest,
     ) -> Result<(), Error> {
         let digests = manifest.layers_digests(Some(IMAGE_ARCHITECTURE))?;
         let digests_count = digests.len();

@@ -1,3 +1,25 @@
 # We only have workspace to reuse `target` directories.
 [workspace]
 members = ["puller", "multiwake", "async-mpmc"]
+
+# Make puller work faster
+[profile.dev.package.libflate]
+opt-level=3
+
+[profile.dev.package.libflate_lz77]
+opt-level=3
+
+[profile.dev.package.adler32]
+opt-level=3
+
+[profile.dev.package.crc32fast]
+opt-level=3
+
+[profile.dev.package.rle-decode-fast]
+opt-level=3
+
+[profile.dev.package.tar]
+opt-level=3
+
+[profile.dev.package.dkregistry]
+opt-level=3

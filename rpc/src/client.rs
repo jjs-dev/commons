@@ -128,9 +128,18 @@ impl Default for ReqwestEngine {
     }
 }
 
+/// Possible errors when using Reqwest-based Engine
+#[derive(Debug, thiserror::Error)]
+pub enum ReqwestError {
+    #[error("transport error")]
+    Reqwest(#[from] reqwest::Error),
+    #[error("error from http crate")]
+    Http(#[from] hyper::http::Error),
+}
+
 impl hyper::service::Service<hyper::Request<hyper::Body>> for ReqwestEngine {
     type Response = hyper::Response<hyper::Body>;
-    type Error = Box<dyn std::error::Error + Send + Sync + 'static>;
+    type Error = ReqwestError;
     type Future = futures_util::future::BoxFuture<'static, Result<Self::Response, Self::Error>>;
 
     fn poll_ready(

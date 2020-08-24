@@ -10,7 +10,7 @@ mod server;
 mod streaming;
 mod unary;
 
-pub use client::{Client, ReqwestEngine};
+pub use client::{Client, ReqwestEngine, ReqwestError};
 pub use server::{Handler, MakeRouter, Router, RouterBuilder};
 pub use streaming::{
     RecvError as StreamingRecvError, SendError as StreamingSendError, Streaming, StreamingRx,

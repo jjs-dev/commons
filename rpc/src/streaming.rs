@@ -137,8 +137,8 @@ pub enum RecvError {
     Io(std::io::Error),
     #[error("parsing failed")]
     Deserialize(serde_json::Error),
-    #[error("unexpected EOF")]
-    UnexpectedEof,
+    #[error("unexpected data")]
+    Unexpected,
 }
 
 impl<E: serde::de::DeserializeOwned, F: serde::de::DeserializeOwned> StreamingRx<E, F> {
@@ -164,6 +164,18 @@ impl<E: serde::de::DeserializeOwned, F: serde::de::DeserializeOwned> StreamingRx
                 self.finish = Some(fin);
                 Ok(None)
             }
+        }
+    }
+    /// Receives finish message.
+    /// If next message in fact was Event, returns error.
+    /// Consumes receiver because no other messages can be sent after Finish.
+    pub async fn finish(mut self) -> Result<F, RecvError> {
+        if let Some(f) = self.finish {
+            return Ok(f);
+        }
+        match self.recv_next_item().await? {
+            Item::Event(_) => Err(RecvError::Unexpected),
+            Item::Finish(fin) => Ok(fin),
         }
     }
 }

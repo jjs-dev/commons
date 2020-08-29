@@ -1,0 +1,10 @@
+[package]
+name = "cancel"
+version = "0.1.0"
+authors = ["Mikail Bagishov <bagishov.mikail@yandex.ru>"]
+edition = "2018"
+
+[dependencies]
+
+[dev-dependencies]
+tokio = { version = "0.2.22", features = ["macros", "rt-core"] }

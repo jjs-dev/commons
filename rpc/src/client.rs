@@ -1,11 +1,12 @@
+pub(crate) mod engines;
+
 use crate::{Receive, Transmit};
-use std::convert::TryInto;
 use tower_util::ServiceExt;
 
 /// RPC Client. `Engine` is something that can actually send requests to the
 /// RPC server, e.g. hyper::Client or reqwest::Client.
 #[derive(Clone)]
-pub struct Client<Engine = ReqwestEngine> {
+pub struct Client<Engine = engines::ReqwestEngine> {
     engine: Engine,
     base: String,
 }
@@ -105,63 +106,5 @@ where
         let response = (&mut self.engine).oneshot(req).await?;
         let rx = <R::Response as crate::Direction>::Rx::from_body(response.into_body());
         Ok((tx, rx))
-    }
-}
-
-/// Engine based on reqwest.
-#[derive(Clone)]
-pub struct ReqwestEngine(reqwest::Client);
-
-impl ReqwestEngine {
-    pub fn wrap_client(cl: reqwest::Client) -> ReqwestEngine {
-        ReqwestEngine(cl)
-    }
-
-    pub fn new() -> ReqwestEngine {
-        ReqwestEngine(reqwest::Client::new())
-    }
-}
-
-impl Default for ReqwestEngine {
-    fn default() -> Self {
-        ReqwestEngine::new()
-    }
-}
-
-/// Possible errors when using Reqwest-based Engine
-#[derive(Debug, thiserror::Error)]
-pub enum ReqwestError {
-    #[error("transport error")]
-    Reqwest(#[from] reqwest::Error),
-    #[error("error from http crate")]
-    Http(#[from] hyper::http::Error),
-}
-
-impl hyper::service::Service<hyper::Request<hyper::Body>> for ReqwestEngine {
-    type Response = hyper::Response<hyper::Body>;
-    type Error = ReqwestError;
-    type Future = futures_util::future::BoxFuture<'static, Result<Self::Response, Self::Error>>;
-
-    fn poll_ready(
-        &mut self,
-        _cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Result<(), Self::Error>> {
-        std::task::Poll::Ready(Ok(()))
-    }
-
-    fn call(&mut self, hyper_req: hyper::Request<hyper::Body>) -> Self::Future {
-        let client = self.0.clone();
-        Box::pin(async move {
-            let reqwest_req: reqwest::Request =
-                hyper_req.map(reqwest::Body::wrap_stream).try_into()?;
-            let response = client.execute(reqwest_req).await?;
-            let mut builder = hyper::Response::builder().status(response.status());
-            for (k, v) in response.headers() {
-                builder = builder.header(k, v);
-            }
-            builder
-                .body(hyper::Body::wrap_stream(response.bytes_stream()))
-                .map_err(Into::into)
-        })
     }
 }

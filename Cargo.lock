@@ -25,6 +25,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "anyhow"
+version = "1.0.32"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6b602bfe940d21c130f3895acd65221e8a61270debe89d628b9cb4e3ccb8569b"
+
+[[package]]
 name = "async-mpmc"
 version = "0.1.0"
 dependencies = [
@@ -1011,6 +1017,7 @@ checksum = "cabe4fa914dec5870285fa7f71f602645da47c486e68486d2b4ceb4a343e90ac"
 name = "rpc"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "futures-util",
  "hyper",
  "reqwest",

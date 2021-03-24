@@ -1,5 +1,6 @@
 use std::io::Write;
 use tokio::io::AsyncBufReadExt;
+use tokio_util::sync::CancellationToken;
 
 #[tracing::instrument]
 async fn read_image_pull_secrets() -> Vec<puller::ImagePullSecret> {
@@ -47,7 +48,7 @@ async fn main() {
         .with_env_filter("debug,puller=trace,cli=trace")
         .init();
     let tempdir = tempfile::tempdir().expect("failed to get a tempdir");
-    let mut tokens: Vec<tokio::sync::CancellationToken> = Vec::new();
+    let mut tokens: Vec<CancellationToken> = Vec::new();
     let mut p = puller::Puller::new().await;
     let mut stdin_reader = tokio::io::BufReader::new(tokio::io::stdin());
     println!("Reading image pull secrets");
@@ -69,7 +70,7 @@ async fn main() {
             }
             continue;
         }
-        let token = tokio::sync::CancellationToken::new();
+        let token = CancellationToken::new();
         tokens.push(token.clone());
 
         let sanitized_name = line.replace('/', "_").replace(':', "-");

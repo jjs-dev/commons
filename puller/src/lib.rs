@@ -5,6 +5,7 @@ use std::{
     sync::Arc,
 };
 use tokio::sync::Semaphore;
+use tokio_util::sync::CancellationToken;
 use tracing::{error, instrument, trace, warn};
 use tracing_futures::Instrument;
 /// Main type of library, which supports loading and unpacking
@@ -49,7 +50,7 @@ impl Puller {
         &self,
         image: &str,
         destination: &Path,
-        cancel: tokio::sync::CancellationToken,
+        cancel: CancellationToken,
     ) -> Result<dkregistry::v2::manifest::Manifest, Error> {
         let image_ref: dkregistry::reference::Reference = image.parse()?;
         trace!(
@@ -107,7 +108,7 @@ impl Puller {
     async fn fetch_layers(
         client: dkregistry::v2::Client,
         image_ref: dkregistry::reference::Reference,
-        cancel: tokio::sync::CancellationToken,
+        cancel: CancellationToken,
         download_semaphore: Arc<Semaphore>,
         destination: PathBuf,
         manifest: &dkregistry::v2::manifest::Manifest,
@@ -169,8 +170,8 @@ impl Puller {
         client: dkregistry::v2::Client,
         sem: Arc<Semaphore>,
         repo: String,
-        mut tx: tokio::sync::mpsc::Sender<(usize, Result<Vec<u8>, dkregistry::errors::Error>)>,
-        cancel: tokio::sync::CancellationToken,
+        tx: tokio::sync::mpsc::Sender<(usize, Result<Vec<u8>, dkregistry::errors::Error>)>,
+        cancel: CancellationToken,
         layer_digest: String,
         layer_id: usize,
     ) {

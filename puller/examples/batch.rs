@@ -21,7 +21,7 @@ async fn main() {
         .pull(
             &image_name,
             tempdir.path(),
-            tokio::sync::CancellationToken::new(),
+            tokio_util::sync::CancellationToken::new(),
         )
         .await
     {

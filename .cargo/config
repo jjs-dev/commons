@@ -1,3 +1,0 @@
-[build]
-# CancellationToken is cool
-rustflags = ["--cfg", "tokio_unstable"]

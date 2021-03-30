@@ -5,7 +5,7 @@ authors = ["Mikail Bagishov <bagishov.mikail@yandex.ru>"]
 edition = "2018"
 
 [dependencies]
-dkregistry = { git = "https://github.com/mikailbag/dkregistry-rs", branch = "config" }
+dkregistry = { git = "https://github.com/mikailbag/dkregistry-rs", branch = "all" }
 thiserror = "1.0.24"
 tokio = { version = "1.4.0", features = ["macros", "fs", "sync", "rt"] }
 tracing = "0.1.25"

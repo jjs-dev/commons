@@ -80,7 +80,7 @@ async fn main() {
             &line,
             pull_dest.display()
         );
-        match p.pull(line, &pull_dest, token).await {
+        match p.pull(line, &pull_dest, Default::default(), token).await {
             Ok(_) => println!("{}: pull succeeded", line),
             Err(err) => {
                 eprintln!("Pull failed: {}", ErrorWrapper(err));

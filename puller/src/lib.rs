@@ -19,6 +19,26 @@ pub struct Puller {
 
 const DEFAULT_DOWNLOADS_LIMIT: usize = 3;
 
+#[derive(Debug)]
+pub enum Tls {
+    /// Require TLS
+    Enable,
+    /// Disable TLS (insecure).
+    Disable,
+}
+
+impl Default for Tls {
+    fn default() -> Self {
+        Tls::Enable
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct PullSettings {
+    /// Tls mode
+    pub tls: Tls,
+}
+
 impl Puller {
     /// Creates new Puller.
     pub async fn new() -> Puller {
@@ -50,6 +70,7 @@ impl Puller {
         &self,
         image: &str,
         destination: &Path,
+        pull_settings: PullSettings,
         cancel: CancellationToken,
     ) -> Result<dkregistry::v2::manifest::Manifest, Error> {
         let image_ref: dkregistry::reference::Reference = image.parse()?;
@@ -64,6 +85,10 @@ impl Puller {
             .username(creds.0)
             .password(creds.1)
             .registry(&image_ref.registry());
+        if let Tls::Disable = pull_settings.tls {
+            config = config.insecure_registry(true);
+        }
+
         let mut client = config.build()?;
         if !client.is_auth().await? {
             let token_scope = format!("repository:{}:pull", image_ref.repository());

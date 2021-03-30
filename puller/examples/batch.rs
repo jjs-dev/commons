@@ -21,6 +21,7 @@ async fn main() {
         .pull(
             &image_name,
             tempdir.path(),
+            Default::default(),
             tokio_util::sync::CancellationToken::new(),
         )
         .await

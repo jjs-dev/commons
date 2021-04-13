@@ -1,23 +1,14 @@
 //! This library implements high-level image puller on top of
 //! `dkregistry` crate. See [`Puller`](Puller) for more.
-use std::{
-    path::{Path, PathBuf},
-    sync::Arc,
-};
-use tokio::sync::Semaphore;
+use std::path::{Path, PathBuf};
 use tokio_util::sync::CancellationToken;
-use tracing::{error, instrument, trace, warn};
-use tracing_futures::Instrument;
+use tracing::{error, instrument, trace};
 /// Main type of library, which supports loading and unpacking
 /// images.
 pub struct Puller {
     /// These secrets will be used to authenticate in registry.
     secrets: Vec<ImagePullSecret>,
-    /// Used to limit parallel downloads
-    download_semaphore: Arc<Semaphore>,
 }
-
-const DEFAULT_DOWNLOADS_LIMIT: usize = 3;
 
 #[derive(Debug)]
 pub enum Tls {
@@ -44,7 +35,6 @@ impl Puller {
     pub async fn new() -> Puller {
         Puller {
             secrets: Vec::new(),
-            download_semaphore: Arc::new(Semaphore::new(DEFAULT_DOWNLOADS_LIMIT)),
         }
     }
 
@@ -107,9 +97,10 @@ impl Puller {
                 return Err(Error::ImageNotExists(image.to_string()));
             }
         }
-        // this task downloads the manifest
-        let sem = self.download_semaphore.clone();
         let destination = destination.to_path_buf();
+        tokio::fs::create_dir_all(&destination)
+            .await
+            .map_err(Error::CreateDest)?;
 
         trace!(
             image = image_ref.to_raw_string().as_str(),
@@ -123,102 +114,65 @@ impl Puller {
 
         trace!(manifest = ?manifest, "fetched manifest");
 
-        Self::fetch_layers(client, image_ref, cancel, sem, destination, &manifest).await?;
+        Self::fetch_layers(client, image_ref, cancel, destination, &manifest).await?;
         Ok(manifest)
     }
 
     /// This function is called by [`Puller::pull`](Puller::pull) when
     /// client is successfully created.
-    #[instrument(skip(client, download_semaphore, cancel, destination, manifest))]
+    #[instrument(skip(client, cancel, destination, manifest))]
     async fn fetch_layers(
         client: dkregistry::v2::Client,
         image_ref: dkregistry::reference::Reference,
         cancel: CancellationToken,
-        download_semaphore: Arc<Semaphore>,
         destination: PathBuf,
         manifest: &dkregistry::v2::manifest::Manifest,
     ) -> Result<(), Error> {
         let digests = manifest.layers_digests(Some(IMAGE_ARCHITECTURE))?;
         let digests_count = digests.len();
         trace!("will fetch {} layers", digests_count);
-        let (tx, mut rx) = tokio::sync::mpsc::channel(digests_count);
-        for (layer_id, layer_digest) in digests.into_iter().enumerate() {
-            let client = client.clone();
-            let sem = download_semaphore.clone();
-            let repo = image_ref.repository();
-            let tx = tx.clone();
-            let cancel = cancel.clone();
-            tokio::task::spawn(
-                Self::fetch_layer(client, sem, repo, tx, cancel, layer_digest, layer_id)
-                    .in_current_span(),
-            );
-        }
-        drop(tx);
-
-        let mut layers = Vec::new();
-        layers.resize_with(digests_count, Vec::new);
-        let mut received_count = 0;
-        while let Some((layer_id, layer_data)) = rx.recv().await {
-            layers[layer_id] = layer_data?;
-            received_count += 1;
-        }
-
-        if cancel.is_cancelled() {
-            return Err(Error::Cancelled);
-        }
-        // operation can not be cancelled arter this point
-
-        assert_eq!(received_count, digests_count);
-        trace!("Starting unpacking");
-
-        // start separate task which unpacks received layers
-        let current_span = tracing::Span::current();
-        tokio::task::spawn_blocking(move || {
-            let _enter = current_span.enter();
-            trace!("Unpacking started");
-            let res = dkregistry::render::unpack(&layers, &destination);
-            trace!("Unpacking finished");
-            res
-        })
-        .await
-        .unwrap()?;
-        if cancel.is_cancelled() {
-            warn!("cancellation request was ignored");
+        for layer_digest in digests.into_iter() {
+            Self::fetch_layer(
+                client.clone(),
+                image_ref.repository(),
+                layer_digest,
+                cancel.clone(),
+                destination.clone(),
+            )
+            .await?;
         }
 
         Ok(())
     }
 
-    /// Tries to download one layer
-    #[instrument(skip(client, sem, tx, cancel, repo, layer_digest))]
+    /// Tries to download and unpack one layer
+    #[instrument(skip(client, repo, cancel, destination))]
     async fn fetch_layer(
         client: dkregistry::v2::Client,
-        sem: Arc<Semaphore>,
         repo: String,
-        tx: tokio::sync::mpsc::Sender<(usize, Result<Vec<u8>, dkregistry::errors::Error>)>,
-        cancel: CancellationToken,
         layer_digest: String,
-        layer_id: usize,
-    ) {
-        let _can_download = sem.acquire_owned().await;
+        cancel: CancellationToken,
+        destination: PathBuf,
+    ) -> Result<(), Error> {
         trace!(layer_digest = layer_digest.as_str(), "download started");
-        tokio::select! {
-            get_layer_result = client.get_blob(&repo, &layer_digest) => {
-                match &get_layer_result {
-                    Ok(vec) => {
-                        trace!(size=vec.len(), "download succeeded");
-                    }
-                    Err(err) => {
-                        error!(error=%err, "layer failed to download");
-                    }
-                }
-                tx.send((layer_id, get_layer_result)).await.expect("should never panic");
-            }
-            _ = cancel.cancelled() => {
-                warn!("layer download was cancelled");
-                // do nothing, the whole pull is cancelled
-            }
+        let data = client.get_blob(&repo, &layer_digest).await?;
+        trace!(size = data.len(), "download succeeded");
+        if cancel.is_cancelled() {
+            return Err(Error::Cancelled);
         }
+        // start separate task which unpacks received layer
+        let current_span = tracing::Span::current();
+        tokio::task::spawn_blocking(move || {
+            let _enter = current_span.enter();
+            trace!("Unpacking started");
+            let res = dkregistry::render::unpack(&[data], &destination);
+            trace!("Unpacking finished");
+            res
+        })
+        .await
+        .unwrap()?;
+
+        Ok(())
     }
 
     /// Tries to lookup credentials for `registry`
@@ -333,4 +287,6 @@ pub enum Error {
     Unpack(#[from] dkregistry::render::RenderError),
     #[error("operation was cancelled")]
     Cancelled,
+    #[error("failed to create destination dir")]
+    CreateDest(#[source] std::io::Error),
 }

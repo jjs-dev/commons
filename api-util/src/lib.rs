@@ -18,6 +18,10 @@ pub enum ErrorKind {
     InvalidInput,
     /// Internal or unknown error
     Internal,
+    /// Resource not found
+    NotFound,
+    /// Request rejected by authorizer
+    Unauthorized,
 }
 
 impl ErrorKind {
@@ -25,6 +29,8 @@ impl ErrorKind {
         match self {
             ErrorKind::InvalidInput => http::StatusCode::BAD_REQUEST,
             ErrorKind::Internal => http::StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorKind::NotFound => http::StatusCode::NOT_FOUND,
+            ErrorKind::Unauthorized => http::StatusCode::UNAUTHORIZED,
         }
     }
 }

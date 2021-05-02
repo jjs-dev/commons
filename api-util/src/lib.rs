@@ -49,6 +49,8 @@ impl std::fmt::Display for ApiError {
     }
 }
 
+impl std::error::Error for ApiError {}
+
 impl ApiError {
     pub fn new(kind: ErrorKind, code: &str) -> Self {
         ApiError {

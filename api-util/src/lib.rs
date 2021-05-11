@@ -76,7 +76,10 @@ impl ApiError {
 }
 
 /// Use this as a `.recover` on routes.
-pub fn recover(rej: warp::Rejection) -> Result<impl warp::Reply, Infallible> {
+pub async fn recover(rej: warp::Rejection) -> Result<impl warp::Reply, warp::Rejection> {
+    if rej.is_not_found() {
+        return Err(rej);
+    }
     let api_error = rej
         .find::<AnyhowRejection>()
         .and_then(|anyhow| anyhow.0.downcast_ref::<ApiError>());

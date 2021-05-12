@@ -28,6 +28,8 @@ impl Default for Tls {
 pub struct PullSettings {
     /// Tls mode
     pub tls: Tls,
+    /// Skip downloading layers
+    pub skip_layers: bool,
 }
 
 impl Puller {
@@ -113,8 +115,9 @@ impl Puller {
             .await?;
 
         trace!(manifest = ?manifest, "fetched manifest");
-
-        Self::fetch_layers(client, image_ref, cancel, destination, &manifest).await?;
+        if !pull_settings.skip_layers {
+            Self::fetch_layers(client, image_ref, cancel, destination, &manifest).await?;
+        }
         Ok(manifest)
     }
 

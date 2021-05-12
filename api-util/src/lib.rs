@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use std::convert::Infallible;
 
 pub struct AnyhowRejection(pub anyhow::Error);
 

@@ -22,9 +22,9 @@ impl BuildInfo {
 
     fn do_get() -> Self {
         BuildInfo {
-            build_date: option_env!("JJS_BUILD_INFO_DATE"),
-            git_revision: option_env!("JJS_BUILD_INFO_COMMIT"),
-            version: option_env!("JJS_BUILD_INFO_VERSION"),
+            build_date: option_env!("JJS_BUILD_INFO_DATE").filter(|s| !s.is_empty()),
+            git_revision: option_env!("JJS_BUILD_INFO_COMMIT").filter(|s| !s.is_empty()),
+            version: option_env!("JJS_BUILD_INFO_VERSION").filter(|s| !s.is_empty()),
         }
     }
 
